@@ -2,60 +2,68 @@
 
 ## 1. Model Name  
 
-Give your model a short, descriptive name.  
-Example: **VibeFinder 1.0**  
+**VibeFinder 1.0**
 
 ---
 
 ## 2. Intended Use  
 
-Describe what your recommender is designed to do and who it is for. 
+VibeFinder suggests songs from a small, fixed catalog based on a listener's stated
+taste — a favorite genre, a favorite mood, a target energy level, and whether they
+like acoustic-sounding songs. It's built for classroom exploration, not real users: it
+assumes the listener already knows and can name their own taste in these exact terms,
+which most real people can't do off the top of their head. It's a teaching tool for
+understanding how content-based scoring works, not a production recommender.
 
-Prompts:  
-
-- What kind of recommendations does it generate  
-- What assumptions does it make about the user  
-- Is this for real users or classroom exploration  
+**Not intended for:** real-world music recommendation, any product with real users, or
+any decision that matters (e.g. don't use this to judge whether a song or artist is
+"good"). It has no listening history, no collaborative signal, and only 18 songs, so it
+cannot generalize beyond this toy catalog and should not be presented to a user as
+understanding their actual taste.
 
 ---
 
 ## 3. How the Model Works  
 
-Explain your scoring approach in simple language.  
-
-Prompts:  
-
-- What features of each song are used (genre, energy, mood, etc.)  
-- What user preferences are considered  
-- How does the model turn those into a score  
-- What changes did you make from the starter logic  
-
-Avoid code here. Pretend you are explaining the idea to a friend who does not program.
+Every song has a genre, a mood, and some numbers describing how energetic, upbeat,
+danceable, and acoustic it sounds. A listener tells the system their favorite genre,
+favorite mood, a target energy level, and whether they like acoustic songs. VibeFinder
+then goes through every song in the catalog one at a time and hands out points: 2
+points if the genre matches exactly, 1.5 points if the mood matches exactly, up to 1
+point for how close the song's energy is to what the listener wants (a perfect match
+gets the full point, and it shrinks the further apart they are), and half a point extra
+if the listener likes acoustic songs and this song sounds acoustic enough. It adds all
+of that up into one score per song, then lines every song up from the highest score to
+the lowest and hands back the top few. The starter code only had placeholder functions
+with no actual scoring — the whole point-based system, the "why did this song get this
+score" explanations, and the ranking/sorting step are what I built on top of it.
 
 ---
 
 ## 4. Data  
 
-Describe the dataset the model uses.  
-
-Prompts:  
-
-- How many songs are in the catalog  
-- What genres or moods are represented  
-- Did you add or remove data  
-- Are there parts of musical taste missing in the dataset  
+The catalog has 18 songs (I started with 10 and added 8 more). Between them, they cover
+13 genres (pop, lofi, rock, ambient, jazz, synthwave, indie pop, hip-hop, folk, metal,
+classical, r&b, reggaeton, punk) and moods ranging from happy and chill to intense,
+moody, sad, and angry. Most genres only have 1–3 songs each, so the catalog is wide but
+shallow — it can represent many different vibes but can't offer much variety *within*
+any one of them. It also has no lyrics, no artist popularity, no listening history, and
+no way to represent a song that blends multiple genres or moods, so any taste that
+depends on those things is invisible to this system.
 
 ---
 
 ## 5. Strengths  
 
-Where does your system seem to work well  
-
-Prompts:  
-
-- User types for which it gives reasonable results  
-- Any patterns you think your scoring captures correctly  
-- Cases where the recommendations matched your intuition  
+VibeFinder gives sensible results when a listener's preferences line up cleanly with
+one clear genre and mood in the catalog — for example, "pop / happy / high energy"
+correctly surfaces upbeat pop songs first, and "lofi / chill / low energy" correctly
+surfaces quiet lofi tracks first (see Evaluation below). The energy-similarity math
+also behaves the way I'd expect: songs closest to the target energy consistently
+outscore songs far from it, even when they don't match on genre or mood at all. And
+because it prints the point breakdown for every song, I could always tell *why* a song
+ranked where it did — that transparency is the system's biggest strength over a
+"black box" score.
 
 ---
 
@@ -197,23 +205,46 @@ happiness beyond the `mood` label and the `valence` number it isn't even using y
 
 ## 8. Future Work  
 
-Ideas for how you would improve the model next.  
+If I kept developing this, I'd:
 
-Prompts:  
-
-- Additional features or preferences  
-- Better ways to explain recommendations  
-- Improving diversity among the top results  
-- Handling more complex user tastes  
+1. **Use `valence` in the score.** Right now "happy" vs. "sad" only exists as a mood
+   label, but the catalog already has a 0–1 valence number for actual musical
+   positivity — adding it as a closeness score (like energy) would let the system
+   distinguish "happy" listeners more precisely instead of relying on an exact string
+   match.
+2. **Detect and flag unmatched preferences.** When a user's genre isn't in the catalog
+   at all, or their mood+energy combo is unusual (like sad+high-energy), the system
+   should say so explicitly ("no songs matched your genre exactly") instead of
+   silently falling back to a partial score.
+3. **Add a diversity rule to the ranking step.** Right now the top 5 can include two
+   songs by the same artist (as it nearly did with "Neon Echo"); capping results per
+   artist or genre would make the top 5 feel less repetitive on a small catalog.
 
 ---
 
 ## 9. Personal Reflection  
 
-A few sentences about your experience.  
+The biggest learning moment was realizing that "recommendation" is really just
+"scoring + sorting" — there's no magic in between. Once I had a number per song, the
+hard design work was already done; the ranking step is almost trivial. What surprised
+me most was how *convincing* a simple weighted-sum score can feel: seeing "Sunrise
+City" show up first for a "pop / happy / high energy" listener, with a clear
+point-by-point explanation, genuinely felt like a real recommendation, even though the
+math behind it is just addition and absolute-value differences.
 
-Prompts:  
+AI tools helped me move fast on the mechanical parts — writing the CSV loader, wiring
+up the dataclasses, generating diverse extra songs for the catalog — but I had to
+double-check anything involving the actual scoring logic and the starter code's
+existing interfaces. For example, `main.py`'s original import (`from recommender
+import ...`) looked fine on the surface but silently failed under `python -m
+src.main`; I only caught it by actually running the code rather than trusting that it
+would work. That was a good reminder that AI-suggested code needs to be run and
+tested, not just read.
 
-- What you learned about recommender systems  
-- Something unexpected or interesting you discovered  
-- How this changed the way you think about music recommendation apps  
+The adversarial testing phase changed how I think about recommendation apps the most.
+Feeding in a deliberately contradictory profile (sad + high-energy metal) and watching
+the system confidently recommend an aggressive song taught me that these systems don't
+"understand" anything — they optimize whatever signal is available, even when that
+signal doesn't add up to something coherent. If I extended this project, I'd want to
+build in some way for the system to notice and communicate when a user's preferences
+don't have a good match, rather than always returning a confident top 5 regardless.
