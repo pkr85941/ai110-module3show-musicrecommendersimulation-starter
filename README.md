@@ -196,11 +196,22 @@ Top recommendations:
 
 ## Experiments You Tried
 
-Use this section to document the experiments you ran. For example:
+**Weight shift: halved genre (2.0 → 1.0), doubled energy (1.0 → 2.0).**
 
-- What happened when you changed the weight on genre from 2.0 to 0.5
-- What happened when you added tempo or valence to the score
-- How did your system behave for different types of users
+For most profiles the #1 result didn't change — the winning song was usually strong
+enough on genre+mood+energy together that halving genre alone didn't flip first
+place. But the *order below #1* shifted noticeably. For "High-Energy Pop," *Rooftop
+Lights* (genre mismatch, mood+energy match) jumped from #3 to #2, passing *Gym Hero*
+(genre match only) — because a strong energy match started outweighing a lone genre
+match. Same pattern in "Chill Lofi": *Spacewalk Thoughts* (mood+energy match, no
+genre) passed *Focus Flow* (genre+energy match, no mood).
+
+**Conclusion:** this made recommendations *more energy-driven and less genre-locked*,
+not objectively "more accurate" — it depends entirely on whether you believe genre or
+energy should dominate a listener's vibe. It confirmed the system is sensitive to
+weight changes exactly where you'd expect: near-tied songs re-rank, while a clear
+best-match song stays on top regardless. See [model_card.md](model_card.md) for the
+full adversarial-profile evaluation and observed biases.
 
 ---
 
