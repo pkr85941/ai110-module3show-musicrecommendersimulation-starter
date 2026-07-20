@@ -17,17 +17,116 @@ Replace this paragraph with your own summary of what your version does.
 
 ## How The System Works
 
-Explain your design in plain language.
+Real-world recommenders (Spotify, YouTube, etc.) don't just look at one song at a
+time. At scale they combine **content signals** (the actual properties of a song —
+genre, tempo, energy) with **behavioral signals** (what millions of similar listeners
+skipped, replayed, or added to playlists) and learn patterns automatically. My version
+is a much smaller, transparent stand-in for the *content-based* half of that idea: it
+compares the measurable properties of each song to a user's stated taste and scores how
+well they match. It deliberately prioritizes the "vibe" of a song — how energetic and
+how positive it feels, plus its genre and mood — over popularity or listening history,
+because those are the features that a person can actually feel and describe.
 
-Some prompts to answer:
+### Features each `Song` uses
 
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-- What information does your `UserProfile` store
-- How does your `Recommender` compute a score for each song
-- How do you choose which songs to recommend
+- `genre` — categorical anchor (pop, lofi, rock, jazz, ambient…)
+- `mood` — categorical vibe label (happy, chill, intense, focused…)
+- `energy` — numeric 0–1, how hyped vs. calm the song is
+- `valence` — numeric 0–1, musical positivity / happiness
 
-You can include a simple diagram or bullet list if helpful.
+(The dataset also has `tempo_bpm`, `danceability`, and `acousticness`, which are good
+candidates for later experiments.)
+
+### What the `UserProfile` stores
+
+The user's preferences, mirroring the song features so they can be compared directly:
+
+- preferred `genre` (e.g. `"lofi"`)
+- preferred `mood` (e.g. `"chill"`)
+- preferred `energy` (a target value 0–1, e.g. `0.35`)
+- preferred `valence` (a target value 0–1, e.g. `0.60`)
+
+### How the `Recommender` scores a song (Scoring Rule)
+
+For **categorical** features it awards points for an exact match. For **numeric**
+features it rewards *closeness* to the user's target rather than "bigger is better":
+
+```
+feature_score = 1 - |song_value - user_preference|      # for energy, valence
+```
+
+Everything is combined with weights so some features matter more than others:
+
+```
+score = w_genre  · (genre matches?)
+      + w_mood   · (mood matches?)
+      + w_energy · (1 - |energy - pref_energy|)
+      + w_valence· (1 - |valence - pref_valence|)
+```
+
+Genre is weighted highest, mood a bit lower, and the numeric features around 1.0 —
+these weights are a knob to experiment with.
+
+### How songs get chosen (Ranking Rule)
+
+The Scoring Rule gives one number per song. The Ranking Rule then sorts **all** songs
+by that score (highest first) and returns the top N. Both rules are needed: scoring
+judges a single song, while ranking makes the comparative decision across the whole
+catalog — which is what a recommendation actually is.
+
+### Example `UserProfile`
+
+```python
+UserProfile(
+    favorite_genre="lofi",
+    favorite_mood="chill",
+    target_energy=0.35,
+    likes_acoustic=True,
+)
+```
+
+Checked against the catalog, this profile clearly separates a match like *Midnight
+Coding* (lofi, chill, energy 0.42, acousticness 0.71 → near-top score) from a mismatch
+like *Broken Mirror* (metal, aggressive, energy 0.97, acousticness 0.05 → near-bottom
+score). It does **not** distinguish well between two songs of the *same* genre with
+different moods, since genre carries the most weight — a known limitation, not a bug.
+
+### Finalized Algorithm Recipe
+
+| Rule | Points |
+|---|---|
+| Genre match | `+2.0` |
+| Mood match | `+1.5` |
+| Energy similarity | `+1.0 × (1 - \|song.energy - target_energy\|)` |
+| Acoustic bonus | `+0.5` if `likes_acoustic` is `True` and `song.acousticness > 0.6` |
+
+Genre outweighs mood because it's the strongest "right bucket / wrong bucket" signal;
+energy is a continuous reward rather than a flat bonus since it's a closeness measure;
+the acoustic bonus is small and conditional since it only matters to some users.
+
+### Data Flow
+
+```mermaid
+flowchart LR
+    A[User Profile\nfavorite_genre, favorite_mood,\ntarget_energy, likes_acoustic] --> C
+    B[songs.csv\none row per song] --> C
+    C[Loop: score_song\nfor every song] --> D[Ranking\nsort by score, take top K]
+    D --> E[Top K Recommendations]
+```
+
+### Expected Biases
+
+- **Genre dominance**: because genre is worth the most points, a song in the "right"
+  genre but a mismatched mood can still outrank a song in the "wrong" genre with a
+  perfect mood/energy match. The system may over-prioritize genre and miss great
+  cross-genre matches.
+- **Small, hand-picked catalog**: 18 songs across ~13 genres means most genres have
+  only 1–2 songs, so results are heavily constrained by whatever happens to exist in
+  the CSV rather than a true "best match."
+- **No history/collaborative signal**: unlike real systems, this recommender has no
+  idea what similar users liked — it can only compare stated preferences to song
+  metadata, so it will keep recommending the same kind of song forever and can't
+  surprise the user with something outside their stated taste.
 
 ---
 
@@ -68,15 +167,27 @@ You can add more tests in `tests/test_recommender.py`.
 
 ## Sample Recommendation Output
 
-Paste a sample of your recommender's output here as a text block so a reader can see what it produces:
+Output of `python -m src.main` for the default profile (`genre=pop, mood=happy, energy=0.8`):
 
 ```
-# e.g.:
-# User profile: genre=indie, mood=chill, energy=low
-# Recommendations:
-#   1. ...
-#   2. ...
-#   3. ...
+Loaded songs: 18
+
+Top recommendations:
+
+1. Sunrise City by Neon Echo - Score: 4.48
+   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.98)
+
+2. Gym Hero by Max Pulse - Score: 2.87
+   Because: genre match (+2.0), energy similarity (+0.87)
+
+3. Rooftop Lights by Indigo Parade - Score: 2.46
+   Because: mood match (+1.5), energy similarity (+0.96)
+
+4. Concrete Bloom by Kid Static - Score: 1.00
+   Because: energy similarity (+1.00)
+
+5. Night Drive Loop by Neon Echo - Score: 0.95
+   Because: energy similarity (+0.95)
 ```
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or demo video link here -->
